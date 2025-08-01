@@ -1,4 +1,5 @@
-// 1inch API proxy server 
+// 1inch API Proxy Server - Clean Production Version
+// Run with: node server.js
 
 const express = require('express');
 const cors = require('cors');
@@ -8,7 +9,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// frontend CORS 
+// Enable CORS for your frontend
 app.use(cors({
   origin: [
     'http://localhost:3000', 
@@ -21,11 +22,11 @@ app.use(cors({
 
 app.use(express.json());
 
-// 1inch API config
+// 1inch API configuration
 const ONEINCH_API_KEY = process.env.ONEINCH_API_KEY;
 const ONEINCH_BASE_URL = 'https://api.1inch.dev';
 
-//TRON/ETH swap addresses
+// Token addresses for TRON/ETH swaps
 const TOKEN_ADDRESSES = {
   ethereum: {
     ETH: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
@@ -39,7 +40,7 @@ const TOKEN_ADDRESSES = {
   }
 };
 
-// Helper - get auth headers
+// Helper function to get auth headers
 const getAuthHeaders = () => {
   const headers = {
     'Content-Type': 'application/json'
@@ -91,7 +92,7 @@ app.get('/api/chains', async (req, res) => {
   }
 });
 
-// Get chain specific tokens
+// Get tokens for a specific chain
 app.get('/api/tokens/:chainId', async (req, res) => {
   try {
     const { chainId } = req.params;
@@ -180,7 +181,7 @@ app.get('/api/swap/:chainId', async (req, res) => {
   }
 });
 
-// Fusion+ quote endpoint 
+// Fusion+ quote endpoint (REAL cross-chain via 1inch)
 app.post('/api/fusion/quote', async (req, res) => {
   try {
     console.log('Fusion+ REAL cross-chain quote request:', req.body);
@@ -194,7 +195,7 @@ app.post('/api/fusion/quote', async (req, res) => {
       });
     }
     
-    // 1inch Fusion+ for cross-chain swaps
+    // Use REAL 1inch Fusion+ for cross-chain swaps
     const response = await axios.post(`${ONEINCH_BASE_URL}/fusion/quoter/v1.0/quote`, {
       fromTokenAddress,
       toTokenAddress, 
@@ -223,7 +224,7 @@ app.post('/api/fusion/quote', async (req, res) => {
   }
 });
 
-// Fusion+ cross-chain swap
+// Execute REAL Fusion+ cross-chain swap
 app.post('/api/fusion/swap', async (req, res) => {
   try {
     console.log('Fusion+ REAL cross-chain swap execution:', req.body);
@@ -270,11 +271,12 @@ app.get('/api/fusion/chains', async (req, res) => {
   }
 });
 
+// Remove the simulated bridge endpoints - we're using REAL 1inch Fusion+ only
 
-// Generic proxy - any 1inch endpoint
-app.all('/api/proxy/*', async (req, res) => {
+// Generic proxy for any 1inch endpoint - fixed path handling
+app.all('/api/proxy/:endpoint(*)', async (req, res) => {
   try {
-    const endpoint = req.params[0];
+    const endpoint = req.params.endpoint;
     const url = `${ONEINCH_BASE_URL}/${endpoint}`;
     
     console.log(`Proxying ${req.method} request to: ${url}`);
@@ -313,7 +315,7 @@ app.get('/api/token-addresses', (req, res) => {
   });
 });
 
-// Error handler middleware
+// Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
   res.status(500).json({
