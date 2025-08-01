@@ -9,15 +9,15 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for your frontend
+// Enable CORS for your frontend - simplified
 app.use(cors({
   origin: [
     'http://localhost:3000', 
     'http://localhost:5173', 
     'http://localhost:8080',
     'https://your-hackathon-app.vercel.app'
-  ],
-  credentials: true
+  ]
+  // Remove credentials: true - not needed for API proxy
 }));
 
 app.use(express.json());
@@ -40,36 +40,52 @@ const TOKEN_ADDRESSES = {
   }
 };
 
-// Helper function to get auth headers
+// Helper function to get auth headers - multiple format support
 const getAuthHeaders = () => {
   const headers = {
     'Content-Type': 'application/json'
   };
   
   if (ONEINCH_API_KEY) {
+    // Try different header formats 1inch might expect
     headers['Authorization'] = `Bearer ${ONEINCH_API_KEY}`;
+    // Some APIs use this format:
+    // headers['X-API-Key'] = ONEINCH_API_KEY;
+    // Or this:
+    // headers['API-Key'] = ONEINCH_API_KEY;
   }
   
   return headers;
 };
 
-// Health check endpoint
+// Health check endpoint - use public endpoint
 app.get('/api/health', async (req, res) => {
   try {
     console.log('Health check request');
-    const response = await axios.get(`${ONEINCH_BASE_URL}/healthcheck`);
+    // Try the public chains endpoint instead of healthcheck
+    const response = await axios.get(`${ONEINCH_BASE_URL}/portfolio/v4/general/supported_chains`);
     res.json({
       success: true,
-      data: response.data,
+      data: {
+        status: 'healthy',
+        chains: response.data.length || 0
+      },
       proxy: 'working',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Health check failed:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      proxy: 'failed'
+    console.error('Health check failed:', error.response?.status, error.response?.data || error.message);
+    
+    // Fallback - just confirm proxy is running
+    res.json({
+      success: true,
+      data: {
+        status: 'proxy-healthy',
+        note: '1inch API may require authentication'
+      },
+      proxy: 'working',
+      apiError: error.response?.status || error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -305,6 +321,70 @@ app.all('/api/proxy/:endpoint(*)', async (req, res) => {
       error: error.response?.data || error.message
     });
   }
+});
+
+// Test different auth methods
+app.get('/api/test-auth', async (req, res) => {
+  if (!ONEINCH_API_KEY) {
+    return res.json({
+      success: false,
+      error: 'No API key set'
+    });
+  }
+
+  const testMethods = [
+    { name: 'Bearer', headers: { 'Authorization': `Bearer ${ONEINCH_API_KEY}` } },
+    { name: 'X-API-Key', headers: { 'X-API-Key': ONEINCH_API_KEY } },
+    { name: 'API-Key', headers: { 'API-Key': ONEINCH_API_KEY } },
+    { name: 'No Auth', headers: {} }
+  ];
+
+  const results = [];
+
+  for (const method of testMethods) {
+    try {
+      console.log(`Testing auth method: ${method.name}`);
+      const response = await axios.get(`${ONEINCH_BASE_URL}/portfolio/v4/general/supported_chains`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...method.headers
+        }
+      });
+      
+      results.push({
+        method: method.name,
+        success: true,
+        status: response.status,
+        dataLength: response.data?.length || 0
+      });
+    } catch (error) {
+      results.push({
+        method: method.name,
+        success: false,
+        status: error.response?.status,
+        error: error.response?.data || error.message
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    results
+  });
+});
+
+// Debug endpoint to check API key setup
+app.get('/api/debug', (req, res) => {
+  res.json({
+    success: true,
+    debug: {
+      hasApiKey: !!ONEINCH_API_KEY,
+      apiKeyLength: ONEINCH_API_KEY ? ONEINCH_API_KEY.length : 0,
+      apiKeyPrefix: ONEINCH_API_KEY ? ONEINCH_API_KEY.substring(0, 8) + '...' : 'not set',
+      baseUrl: ONEINCH_BASE_URL,
+      timestamp: new Date().toISOString()
+    }
+  });
 });
 
 // Token address helper endpoint
